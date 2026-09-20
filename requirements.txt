@@ -1,0 +1,3 @@
+pandas>=2.0
+pyinrail
+python-dateutil>=2.8

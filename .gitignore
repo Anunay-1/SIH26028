@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+
+data/raw/
+data/interim/
+
+# processed CSVs are your accumulated dataset — decide deliberately whether
+# these belong in git (they'll grow large) or should be tracked elsewhere
+# (e.g. git-lfs, cloud storage) once poll_live_status.py has been running a while
