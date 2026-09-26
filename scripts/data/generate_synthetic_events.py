@@ -1,147 +1,87 @@
 """
-Generates a realistic SYNTHETIC live-status log by simulating trains running
-their real schedules (from route_stations.csv) with randomized delay
-behavior, instead of waiting on a live data source that keeps failing.
+CLI wrapper around app.providers.replay.ReplayProvider. This file is now
+intentionally thin — ALL the delay modeling logic lives in
+app/simulation/delay_model.py and app/simulation/journey_simulator.py, and
+ALL the orchestration (including rake-cascading lookback) lives in
+ReplayProvider. This script's only job is: sample some (train, date) pairs,
+call the provider, write the results to a CSV.
 
-This is the ReplayProvider concept from the architecture doc (Section 4.4,
-11.5), just generating the replay data ourselves instead of recording it
-from a real feed. It unblocks Phase C (baseline ETA) and Phase D (ML model)
-immediately, and produces output in EXACTLY the same schema as
-poll_live_status.py would, so nothing downstream needs to change when a
-real LiveStatusProvider is finally working — you just point the pipeline
-at real data instead of this and everything else stays the same.
+WHY VIA ReplayProvider RATHER THAN CALLING simulate_journey() DIRECTLY: using
+the same provider the rest of the app will eventually use means this batch
+dataset is generated with EXACTLY the same logic (including rake-cascading
+lookback to the previous day) as any other caller would get — no risk of two
+slightly-different copies of the orchestration drifting apart.
 
-DELAY MODEL (intentionally simple, documented so you can defend it to
-judges as "a synthetic baseline for development," not "pretending this is
-real data"):
-  - Each journey gets a random "delay personality" drawn once (some trains
-    run early, some chronically late) via a base delay offset.
-  - Each section adds a small random walk on top of that base delay,
-    occasionally with a larger random "incident" delay (simulating
-    congestion/signal holds), so delay evolves realistically across a
-    journey rather than jumping around independently at each station.
+REPRODUCIBILITY NOTE: --seed controls which (train, date) pairs get SAMPLED.
+The actual delay simulation for a given (train, date) pair is independently
+deterministic (see ReplayProvider/_deterministic_seed) — so the same train on
+the same date always simulates identically regardless of --seed, only which
+trains/dates get chosen for this particular batch changes.
+
+WHY A FULL YEAR: seasonal effects (fog Nov-Feb, monsoon Jun-Sep) are core to
+the delay model's realism. Sampling only the last 14 days (the original
+version of this script) could never actually exercise those seasonal
+branches. Spreading simulated journeys across a full year is what makes the
+fog/monsoon components in delay_model.py actually show up in the data,
+rather than sitting unused.
 
 Usage:
-    python scripts/data/generate_synthetic_events.py --num-journeys 200
+    python scripts/data/generate_synthetic_events.py --num-journeys 500
 """
 
 import argparse
 import csv
 import random
 import sys
-from datetime import datetime, timedelta, date
+from datetime import date, timedelta
 from pathlib import Path
-
-import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 
 sys.path.insert(0, str(REPO_ROOT))
 from app.schemas.canonical import TrainStateEvent, csv_columns  # noqa: E402
-
-
-def parse_time_str(t: str, base_date: date, day_offset: int = 0):
-    """Combine a schedule's HH:MM:SS with a base date + day offset into a real datetime."""
-    if pd.isna(t) or t in (None, "", "None"):
-        return None
-    h, m, s = [int(x) for x in str(t).split(":")]
-    return datetime.combine(base_date, datetime.min.time()) + timedelta(
-        days=day_offset, hours=h, minutes=m, seconds=s
-    )
-
-
-def simulate_journey(route_id: str, train_number: str, stops: pd.DataFrame,
-                      journey_date: date, rng: random.Random):
-    """
-    Walks through one train's real stop sequence, generating a synthetic
-    TrainStateEvent at each stop with realistic cumulative delay.
-    Returns a list of TrainStateEvent.
-    """
-    events = []
-    base_delay_minutes = rng.gauss(mu=5, sigma=8)  # this train's general "personality"
-    cumulative_delay = max(0, base_delay_minutes)
-
-    stops = stops.sort_values("sequence").reset_index(drop=True)
-    day_counter = 0
-    prev_sched_time = None
-
-    for i, row in stops.iterrows():
-        sched_time_raw = row["scheduled_arrival"] if pd.notna(row["scheduled_arrival"]) else row["scheduled_departure"]
-        sched_dt = parse_time_str(sched_time_raw, journey_date, day_counter)
-        if sched_dt is None:
-            continue
-
-        # detect day rollover (schedule time went backwards vs previous stop)
-        if prev_sched_time is not None and sched_dt < prev_sched_time:
-            day_counter += 1
-            sched_dt = parse_time_str(sched_time_raw, journey_date, day_counter)
-        prev_sched_time = sched_dt
-
-        # random walk on delay, with occasional bigger "incident" jumps
-        cumulative_delay += rng.gauss(mu=0, sigma=2)
-        if rng.random() < 0.05:  # 5% chance of a bigger delay event at this section
-            cumulative_delay += rng.uniform(10, 30)
-        cumulative_delay = max(0, cumulative_delay)  # trains don't un-delay below 0 here
-
-        actual_dt = sched_dt + timedelta(minutes=cumulative_delay)
-        next_station = stops.iloc[i + 1]["station_code"] if i + 1 < len(stops) else None
-
-        events.append(
-            TrainStateEvent(
-                train_number=train_number,
-                journey_date=journey_date.strftime("%d-%m-%Y"),
-                event_time=actual_dt.isoformat(),
-                received_at=actual_dt.isoformat(),  # synthetic: no real ingestion lag
-                last_station_code=row["station_code"],
-                next_station_code=next_station,
-                delay_minutes=round(cumulative_delay, 1),
-                source="synthetic",
-                source_event_id=f"{route_id}_{i}",
-            )
-        )
-    return events
+from app.providers.replay import ReplayProvider  # noqa: E402
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num-journeys", type=int, default=200,
+    parser.add_argument("--num-journeys", type=int, default=500,
                          help="how many (train, date) journeys to simulate")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default=str(PROCESSED_DIR / "synthetic_status_log.csv"))
     parser.add_argument("--routes-dir", default=str(PROCESSED_DIR),
-                         help="folder containing routes.csv and route_stations.csv to simulate from")
+                         help="folder containing stations.csv/routes.csv/route_stations.csv to simulate from")
+    parser.add_argument("--days-back", type=int, default=365,
+                         help="spread simulated journeys across this many past days, "
+                              "so seasonal effects (fog/monsoon) actually appear in the data")
     args = parser.parse_args()
 
-    rng = random.Random(args.seed)
-
     routes_dir = Path(args.routes_dir)
-    routes = pd.read_csv(routes_dir / "routes.csv")
-    route_stations = pd.read_csv(routes_dir / "route_stations.csv")
+    provider = ReplayProvider(routes_dir)
 
-    # only simulate routes that actually have a plausible stop count (2-40),
-    # sidestepping the corrupted-schedule routes we found earlier rather than
-    # baking that known bad data into our synthetic set
-    stop_counts = route_stations.groupby("route_id").size()
-    plausible_route_ids = stop_counts[(stop_counts >= 2) & (stop_counts <= 40)].index
-    candidate_routes = routes[routes["route_id"].isin(plausible_route_ids)]
-
-    if candidate_routes.empty:
+    usable_routes = provider._routes[provider._routes["route_id"].isin(provider._plausible_route_ids)]
+    if usable_routes.empty:
         print("No routes with a plausible (2-40) stop count found — "
               "check route_stations.csv before proceeding.")
         return
 
-    sampled_routes = candidate_routes.sample(
-        n=min(args.num_journeys, len(candidate_routes)), random_state=args.seed
+    sample_rng = random.Random(args.seed)
+    sampled_routes = usable_routes.sample(
+        n=min(args.num_journeys, len(usable_routes)), random_state=args.seed,
+        replace=args.num_journeys > len(usable_routes),
     )
+    if args.num_journeys > len(usable_routes):
+        print(f"[note] requested {args.num_journeys} journeys but only "
+              f"{len(usable_routes)} plausible routes exist — sampling with "
+              f"replacement (same routes simulated on different dates, which is "
+              f"realistic anyway since real trains run repeatedly)")
 
     all_events = []
     today = date.today()
     for _, route in sampled_routes.iterrows():
-        stops = route_stations[route_stations["route_id"] == route["route_id"]]
-        # spread journeys across the past 14 days so we get day-of-week variety
-        journey_date = today - timedelta(days=rng.randint(0, 14))
-        events = simulate_journey(route["route_id"], route["train_number"], stops, journey_date, rng)
+        journey_date = today - timedelta(days=sample_rng.randint(0, args.days_back))
+        events = provider.get_journey_events(route["train_number"], journey_date)
         all_events.extend(events)
 
     out_path = Path(args.out)
@@ -153,8 +93,8 @@ def main():
             writer.writerow(e.__dict__)
 
     print(f"Simulated {len(sampled_routes)} journeys -> {len(all_events)} events -> {out_path}")
-    print(f"(excluded routes with implausible stop counts from the corrupted-schedule "
-          f"issue found earlier — {len(routes) - len(candidate_routes)} routes skipped)")
+    print(f"(spread across the last {args.days_back} days; "
+          f"excluded {len(provider._routes) - len(usable_routes)} routes with implausible stop counts)")
 
 
 if __name__ == "__main__":

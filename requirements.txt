@@ -1,3 +1,7 @@
 pandas>=2.0
-pyinrail
 python-dateutil>=2.8
+
+# pyinrail — REMOVED. Depends on `demjson`, whose build requires `use_2to3`,
+# a setuptools feature removed years ago. Fails to install on any current
+# Python (confirmed on 3.14). Kept out until/unless a working fork surfaces —
+# see README.md "Status as of last session" for the current data-source plan.

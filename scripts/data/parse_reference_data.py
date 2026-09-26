@@ -108,10 +108,22 @@ def parse_schedules(raw: list, routes_df: pd.DataFrame) -> pd.DataFrame:
     sort key for multi-day trains with same-day repeats. Flag this for
     Phase A step 5 ("build a small verified dataset") rather than trusting
     it blindly.
+
+    distance_from_origin_km: schedules.json has NO per-stop distance field,
+    only trains.json's total route distance. We estimate each stop's
+    distance by linear interpolation across sequence position (stop N of M
+    is assumed to be at (N-1)/(M-1) of the total route distance). This is a
+    documented approximation — real stations aren't evenly spaced — but it's
+    what makes journey_simulator.py's distance-scaled running-noise and its
+    recovery-margin (schedule-padding) mechanism actually functional at all,
+    versus falling back to a flat default for every section. Worth revisiting
+    with real inter-station distances if a better source ever turns up.
     """
     train_to_route = {}
+    total_distance_by_route = {}
     for _, r in routes_df.iterrows():
         train_to_route.setdefault(str(r["train_number"]), r["route_id"])
+        total_distance_by_route[r["route_id"]] = r.get("distance_km")
 
     grouped = defaultdict(list)
     for stop in raw:
@@ -125,10 +137,23 @@ def parse_schedules(raw: list, routes_df: pd.DataFrame) -> pd.DataFrame:
         if route_id is None:
             skipped_no_route += 1
             continue
+
+        total_distance = total_distance_by_route.get(route_id)
+        has_distance = total_distance is not None and pd.notna(total_distance) and total_distance > 0
+        num_stops = len(stops)
+
         # preserve source order as the sequence proxy — see note above
         for seq, stop in enumerate(stops, start=1):
             arrival = stop.get("arrival")
             departure = stop.get("departure")
+
+            if has_distance and num_stops > 1:
+                distance_from_origin = round(total_distance * (seq - 1) / (num_stops - 1), 1)
+            elif has_distance:
+                distance_from_origin = 0.0  # single-stop edge case
+            else:
+                distance_from_origin = None
+
             rows.append(
                 RouteStation(
                     route_id=route_id,
@@ -136,7 +161,7 @@ def parse_schedules(raw: list, routes_df: pd.DataFrame) -> pd.DataFrame:
                     station_code=stop.get("station_code"),
                     scheduled_arrival=None if arrival in (None, "None") else arrival,
                     scheduled_departure=None if departure in (None, "None") else departure,
-                    distance_from_origin_km=None,
+                    distance_from_origin_km=distance_from_origin,
                     stop_flag=True,
                 ).__dict__
             )
