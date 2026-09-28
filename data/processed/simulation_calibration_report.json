@@ -1,0 +1,35 @@
+{
+  "title": "Simulation Operational Realism Audit",
+  "benchmark_source": "Ministry of Railways Published Operational Statistics (FY 2022-23 / Rajya Sabha PQ)",
+  "punctuality_grace_minutes": 15,
+  "classes": {
+    "Premium": {
+      "samples_evaluated": 2,
+      "simulated_punctuality_pct": 100.0,
+      "ir_target_pct": 90.0,
+      "gap_points": 10.0,
+      "mean_final_delay_minutes": 4.2,
+      "median_final_delay_minutes": 4.2,
+      "p90_final_delay_minutes": 6.6
+    },
+    "Mail_Express": {
+      "samples_evaluated": 72,
+      "simulated_punctuality_pct": 77.8,
+      "ir_target_pct": 84.1,
+      "gap_points": -6.3,
+      "mean_final_delay_minutes": 10.1,
+      "median_final_delay_minutes": 8.1,
+      "p90_final_delay_minutes": 20.1
+    },
+    "Passenger": {
+      "samples_evaluated": 75,
+      "simulated_punctuality_pct": 73.3,
+      "ir_target_pct": 68.0,
+      "gap_points": 5.3,
+      "mean_final_delay_minutes": 13.4,
+      "median_final_delay_minutes": 10.4,
+      "p90_final_delay_minutes": 31.3
+    }
+  },
+  "notes": "Evaluation uses standard Indian Railways 15-minute terminating arrival threshold."
+}

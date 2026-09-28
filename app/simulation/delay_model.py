@@ -23,6 +23,8 @@ Mail/Express/Passenger trains. `priority_multiplier` below encodes this.
 import math
 import random
 from dataclasses import dataclass
+from typing import Any
+import pandas as pd
 
 
 # Lower multiplier = less exposed to delay-inducing events. Values are
@@ -30,18 +32,38 @@ from dataclasses import dataclass
 # India), not fitted data.
 PRIORITY_MULTIPLIERS = {
     "Rajdhani": 0.4,
+    "Raj": 0.4,
     "Shatabdi": 0.4,
+    "Shtb": 0.4,
+    "JShtb": 0.45,
     "Duronto": 0.5,
+    "Drnt": 0.5,
+    "Vande Bharat": 0.4,
     "Superfast": 0.7,
+    "SF": 0.7,
+    "SKr": 0.7,
+    "GR": 0.7,
     "Mail": 1.0,
     "Express": 1.0,
-    "Passenger": 1.3,  # ordinary passenger trains get the least precedence
+    "Exp": 1.0,
+    "Hyd": 1.0,
+    "Del": 1.0,
+    "Klkt": 1.0,
+    "Passenger": 1.25,
+    "Pass": 1.25,
+    "MEMU": 1.25,
+    "DEMU": 1.25,
+    "Toy": 1.25,
 }
 DEFAULT_PRIORITY_MULTIPLIER = 1.0
 
 
-def priority_multiplier(train_type: str) -> float:
-    return PRIORITY_MULTIPLIERS.get((train_type or "").strip(), DEFAULT_PRIORITY_MULTIPLIER)
+def priority_multiplier(train_type: Any) -> float:
+    if pd.isna(train_type) or train_type is None:
+        t = ""
+    else:
+        t = str(train_type).strip()
+    return PRIORITY_MULTIPLIERS.get(t, DEFAULT_PRIORITY_MULTIPLIER)
 
 
 # Real, officially-cited average speeds by train class (km/h, including halts) —
@@ -61,19 +83,38 @@ def priority_multiplier(train_type: str) -> float:
 # is a real, sourced simplification rather than an arbitrary constant.
 TYPICAL_AVERAGE_SPEED_KMH = {
     "Rajdhani": 78.0,
+    "Raj": 78.0,
     "Shatabdi": 78.0,
+    "Shtb": 78.0,
+    "JShtb": 70.0,
     "Duronto": 76.0,
+    "Drnt": 76.0,
     "Vande Bharat": 80.0,
     "Superfast": 58.0,
+    "SF": 58.0,
+    "SKr": 58.0,
+    "GR": 58.0,
     "Mail": 51.0,
     "Express": 51.0,
+    "Exp": 51.0,
+    "Hyd": 51.0,
+    "Del": 51.0,
+    "Klkt": 51.0,
     "Passenger": 35.0,
+    "Pass": 35.0,
+    "MEMU": 35.0,
+    "DEMU": 35.0,
+    "Toy": 25.0,
 }
 DEFAULT_AVERAGE_SPEED_KMH = 45.0  # fallback for unrecognized/unlabeled train types
 
 
-def typical_average_speed_kmh(train_type: str) -> float:
-    return TYPICAL_AVERAGE_SPEED_KMH.get((train_type or "").strip(), DEFAULT_AVERAGE_SPEED_KMH)
+def typical_average_speed_kmh(train_type: Any) -> float:
+    if pd.isna(train_type) or train_type is None:
+        t = ""
+    else:
+        t = str(train_type).strip()
+    return TYPICAL_AVERAGE_SPEED_KMH.get(t, DEFAULT_AVERAGE_SPEED_KMH)
 
 
 @dataclass
@@ -211,6 +252,9 @@ def disruption_jump(rng: random.Random) -> float:
     # Pareto(alpha=1.5) scaled — heavy right tail, occasional huge values
     magnitude = (rng.paretovariate(1.5) - 1) * 15
     return round(min(magnitude, 180), 2)  # cap at 3 hours so it stays plausible
+
+
+RECOVERY_MARGIN_FRACTION = 0.05
 
 
 def recovery_margin(scheduled_minutes: float, geographic_minimum_minutes: float,
