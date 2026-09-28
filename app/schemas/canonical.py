@@ -1,9 +1,17 @@
 """
 Canonical data model — mirrors Section 10.2 of the Team Mango architecture doc.
+
+These dataclasses are the single source of truth for field names across:
+  - the CSVs written/read during this data-only phase
+  - the future PostgreSQL tables (Section 10.3)
+  - the API response schemas (Section 14)
+
+Keeping one definition here means a CSV column rename and a future DB column
+rename are the same edit, not two places that can drift apart.
 """
 
-from dataclasses import dataclass, field, fields, asdict
-from typing import Optional, List, Dict, Any
+from dataclasses import dataclass, field, fields
+from typing import Optional
 
 
 @dataclass
@@ -15,13 +23,10 @@ class Station:
     zone: Optional[str] = None
     state: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
 
 @dataclass
 class Route:
-    route_id: str
+    route_id: str          # derived, e.g. f"{train_number}_{direction}"
     train_number: str
     train_name: str
     source_station_code: str
@@ -29,154 +34,45 @@ class Route:
     distance_km: Optional[float] = None
     train_type: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
 
 @dataclass
 class RouteStation:
     route_id: str
     sequence: int
     station_code: str
-    scheduled_arrival: Optional[str] = None
-    scheduled_departure: Optional[str] = None
+    scheduled_arrival: Optional[str] = None   # "HH:MM:SS" or None for origin
+    scheduled_departure: Optional[str] = None  # "HH:MM:SS" or None for terminus
     distance_from_origin_km: Optional[float] = None
     stop_flag: bool = True
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
 
 
 @dataclass
 class TrainStateEvent:
     """One immutable observation from a live-status provider (Section 10.2)."""
     train_number: str
-    journey_date: str
-    event_time: str
-    received_at: str
+    journey_date: str          # "YYYY-MM-DD"
+    event_time: str            # observed_at, ISO 8601
+    received_at: str           # when WE received it, ISO 8601
     last_station_code: Optional[str]
     next_station_code: Optional[str]
     delay_minutes: Optional[int]
-    source: str
+    source: str                # e.g. "pyinrail", "replay"
     source_event_id: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
 
 
 @dataclass
 class SectionObservation:
     """Training-ready row: what actually happened on one section of one journey."""
-    journey_id: str
+    journey_id: str            # f"{train_number}_{journey_date}"
     from_station_code: str
     to_station_code: str
     scheduled_minutes: Optional[float]
     actual_minutes: Optional[float]
-    day_of_week: int
-    hour_bucket: int
-    source_event_ids: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class TrainJourney:
-    train_number: str
-    journey_date: str
-    route_id: str
-    train_name: str
-    train_type: Optional[str]
-    events: List[TrainStateEvent] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "train_number": self.train_number,
-            "journey_date": self.journey_date,
-            "route_id": self.route_id,
-            "train_name": self.train_name,
-            "train_type": self.train_type,
-            "events": [e.to_dict() for e in self.events],
-        }
-
-
-@dataclass
-class TrainState:
-    """Current live operational snapshot of a train journey."""
-    train_number: str
-    journey_date: str
-    last_station_code: Optional[str]
-    next_station_code: Optional[str]
-    current_delay_minutes: int
-    status: str
-    last_updated: str
-    as_of: Optional[str] = None
-    progress_percentage: float = 0.0
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class StationETA:
-    """Quantile ETA forecast for a single station along the route."""
-    sequence: int
-    station_code: str
-    station_name: str
-    scheduled_arrival: Optional[str]
-    scheduled_departure: Optional[str]
-    predicted_delay_p10: float
-    predicted_delay_p50: float
-    predicted_delay_p90: float
-    estimated_arrival_p10: Optional[str]
-    estimated_arrival_p50: Optional[str]
-    estimated_arrival_p90: Optional[str]
-    status: str
-    distance_km: Optional[float] = None
-    shap_explanations: List[Dict[str, Any]] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class PredictionSnapshot:
-    """Full journey dynamic ETA forecast snapshot."""
-    train_number: str
-    train_name: str
-    train_type: Optional[str]
-    journey_date: str
-    as_of: str
-    current_station_code: Optional[str]
-    current_delay_minutes: int
-    forecasts: List[StationETA]
-    model_version: str
-    generated_at: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "train_number": self.train_number,
-            "train_name": self.train_name,
-            "train_type": self.train_type,
-            "journey_date": self.journey_date,
-            "as_of": self.as_of,
-            "current_station_code": self.current_station_code,
-            "current_delay_minutes": self.current_delay_minutes,
-            "forecasts": [f.to_dict() for f in self.forecasts],
-            "model_version": self.model_version,
-            "generated_at": self.generated_at,
-        }
-
-
-@dataclass
-class SourceHealth:
-    provider: str
-    status: str
-    details: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+    day_of_week: int           # 0=Monday
+    hour_bucket: int           # hour of day the section started, 0-23
+    source_event_ids: str      # comma-joined ids of the two events this was derived from
 
 
 def csv_columns(dataclass_type) -> list[str]:
+    """Convenience: consistent column order for writing CSVs from these types."""
     return [f.name for f in fields(dataclass_type)]
