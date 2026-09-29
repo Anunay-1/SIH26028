@@ -38,10 +38,10 @@ def print_journey(provider: ReplayProvider, train_number: str, journey_date: dat
         return
 
     route_row = routes_df[routes_df["train_number"].astype(str) == str(train_number)].iloc[0]
-    print(f"\n=== Train {train_number} — {route_row['train_name']} ({route_row['train_type']}) ===")
+    print(f"\n=== Train {train_number} - {route_row['train_name']} ({route_row['train_type']}) ===")
     print(f"Journey date: {journey_date}    Route: {route_row['source_station_code']} -> {route_row['destination_station_code']}")
     print()
-    print(f"{'Seq':<4} {'Station':<8} {'Actual Time':<16} {'Delay (min)':<12} {'Δ vs prev':<10}")
+    print(f"{'Seq':<4} {'Station':<8} {'Actual Time':<16} {'Delay (min)':<12} {'Delta':<10}")
     print("-" * 55)
 
     prev_delay = None

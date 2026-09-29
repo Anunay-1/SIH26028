@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
 import pandas as pd
-import lightgbm as lgb
+try:
+    import lightgbm as lgb
+except ImportError:
+    lgb = None
 
 from app.config import MODELS_DIR
 from app.ml.feature_builder import FEATURE_COLUMNS
@@ -15,13 +18,15 @@ from app.ml.feature_builder import FEATURE_COLUMNS
 class DynamicETAPredictor:
     def __init__(self, models_dir: Path = MODELS_DIR):
         self.models_dir = Path(models_dir)
-        self.model_p10: Optional[lgb.Booster] = None
-        self.model_p50: Optional[lgb.Booster] = None
-        self.model_p90: Optional[lgb.Booster] = None
+        self.model_p10 = None
+        self.model_p50 = None
+        self.model_p90 = None
         self.model_version = "v1.1-lightgbm-quantile-shap"
         self._load_models()
 
     def _load_models(self):
+        if lgb is None:
+            return
         p10_path = self.models_dir / "model_p10.txt"
         p50_path = self.models_dir / "model_p50.txt"
         p90_path = self.models_dir / "model_p90.txt"
