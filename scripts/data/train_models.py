@@ -8,15 +8,19 @@ Guarantees:
 """
 
 import json
-from datetime import date, datetime, timedelta
+import sys
 from pathlib import Path
+from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
 from app.config import PROCESSED_DATA_DIR, MODELS_DIR
 from app.ml.baseline import DelayPropagationBaseline
-from app.ml.feature_builder import extract_features, FEATURE_COLUMNS
+from app.ml.feature_builder import extract_features, get_station_centrality, FEATURE_COLUMNS
 from app.providers.replay import ReplayProvider
 
 
@@ -50,7 +54,11 @@ def build_training_dataset(data_dir: Path, num_trains: int = 50, num_days: int =
             # Walk through each intermediate point to create realistic prediction samples
             for event_idx in range(1, len(events) - 1):
                 ev = events[event_idx]
+                prev_ev = events[event_idx - 1]
                 curr_delay = float(ev.delay_minutes or 0)
+                prev_delay = float(prev_ev.delay_minutes or 0)
+                delay_momentum = curr_delay - prev_delay
+
                 curr_dt = datetime.fromisoformat(ev.event_time.replace("Z", "+00:00")).replace(tzinfo=None)
                 curr_stn = ev.last_station_code
 
@@ -80,6 +88,8 @@ def build_training_dataset(data_dir: Path, num_trains: int = 50, num_days: int =
                         continue
                     actual_tgt_delay = float(tgt_ev[-1].delay_minutes or 0)
 
+                    centrality = get_station_centrality(tgt_code)
+
                     feat = extract_features(
                         current_delay_minutes=curr_delay,
                         train_type=t_type,
@@ -89,6 +99,8 @@ def build_training_dataset(data_dir: Path, num_trains: int = 50, num_days: int =
                         distance_to_station=dist_to_tgt,
                         scheduled_section_minutes=max(10.0, dist_to_tgt / 0.8),
                         accumulated_distance=tgt_dist,
+                        delay_momentum=delay_momentum,
+                        station_centrality=centrality,
                     )
                     feat["target_delay"] = actual_tgt_delay
                     feat["journey_date"] = cur_date.isoformat()
@@ -153,10 +165,15 @@ def train():
         models[q] = booster
         preds[q] = np.maximum(0.0, booster.predict(X_test))
 
-        # Save model artifact
+        # Save model artifact with strict LF line endings for cross-platform compatibility
         filename = f"model_p{int(q*100)}.txt"
-        booster.save_model(str(MODELS_DIR / filename))
-        print(f"Saved {filename}")
+        model_path = MODELS_DIR / filename
+        booster.save_model(str(model_path))
+        with open(model_path, "rb") as mf:
+            m_bytes = mf.read().replace(b"\r\n", b"\n")
+        with open(model_path, "wb") as mf:
+            mf.write(m_bytes)
+        print(f"Saved {filename} (LF normalized)")
 
     # Monotonicity adjustment for evaluation
     preds[0.5] = np.maximum(preds[0.1], preds[0.5])

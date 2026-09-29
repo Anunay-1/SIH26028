@@ -5,7 +5,10 @@ Redis cache store with automatic in-memory dictionary fallback.
 import json
 import logging
 from typing import Optional, Any
-import redis
+try:
+    import redis
+except ImportError:
+    redis = None
 
 from app.config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD
 
@@ -15,11 +18,15 @@ logger = logging.getLogger(__name__)
 class CacheStore:
     def __init__(self):
         self._memory_store: dict = {}
-        self._redis: Optional[redis.Redis] = None
+        self._redis = None
         self._is_redis_available = False
         self._init_redis()
 
     def _init_redis(self):
+        if redis is None:
+            self._is_redis_available = False
+            logger.info("redis package not installed; using in-memory dictionary fallback.")
+            return
         try:
             r = redis.Redis(
                 host=REDIS_HOST,

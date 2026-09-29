@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 import pandas as pd
 import numpy as np
 
-from app.ml.feature_builder import extract_features, to_dataframe
+from app.ml.feature_builder import extract_features, get_station_centrality, to_dataframe
 from app.ml.predictor import predictor
 from app.schemas.canonical import PredictionSnapshot, StationETA
 from app.services.status_service import status_service
@@ -80,6 +80,10 @@ class PredictionService:
 
         passed_stns = {e.last_station_code for e in events if e.last_station_code}
 
+        delay_momentum = 0.0
+        if len(events) >= 2:
+            delay_momentum = float(events[-1].delay_minutes or 0.0) - float(events[-2].delay_minutes or 0.0)
+
         # Build feature list for upcoming stations
         feature_rows = []
         current_time_dt = (
@@ -102,6 +106,7 @@ class PredictionService:
             zone = clean_str(stop.get("zone")) or "NR"
 
             if not is_passed:
+                centrality = get_station_centrality(stn_code)
                 feat = extract_features(
                     current_delay_minutes=current_delay,
                     train_type=clean_str(train_info.get("train_type")) or "Exp",
@@ -111,6 +116,8 @@ class PredictionService:
                     distance_to_station=dist_to_stn,
                     scheduled_section_minutes=max(10.0, dist_to_stn / 0.8),
                     accumulated_distance=dist_from_orig,
+                    delay_momentum=delay_momentum,
+                    station_centrality=centrality,
                 )
                 feature_rows.append(feat)
 

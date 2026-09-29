@@ -8,27 +8,27 @@
       "simulated_punctuality_pct": 100.0,
       "ir_target_pct": 90.0,
       "gap_points": 10.0,
-      "mean_final_delay_minutes": 4.2,
-      "median_final_delay_minutes": 4.2,
-      "p90_final_delay_minutes": 6.6
+      "mean_final_delay_minutes": 1.4,
+      "median_final_delay_minutes": 1.4,
+      "p90_final_delay_minutes": 2.5
     },
     "Mail_Express": {
       "samples_evaluated": 72,
-      "simulated_punctuality_pct": 77.8,
+      "simulated_punctuality_pct": 72.2,
       "ir_target_pct": 84.1,
-      "gap_points": -6.3,
-      "mean_final_delay_minutes": 10.1,
-      "median_final_delay_minutes": 8.1,
-      "p90_final_delay_minutes": 20.1
+      "gap_points": -11.9,
+      "mean_final_delay_minutes": 11.7,
+      "median_final_delay_minutes": 5.8,
+      "p90_final_delay_minutes": 28.8
     },
     "Passenger": {
       "samples_evaluated": 75,
-      "simulated_punctuality_pct": 73.3,
+      "simulated_punctuality_pct": 41.3,
       "ir_target_pct": 68.0,
-      "gap_points": 5.3,
-      "mean_final_delay_minutes": 13.4,
-      "median_final_delay_minutes": 10.4,
-      "p90_final_delay_minutes": 31.3
+      "gap_points": -26.7,
+      "mean_final_delay_minutes": 22.0,
+      "median_final_delay_minutes": 18.7,
+      "p90_final_delay_minutes": 39.9
     }
   },
   "notes": "Evaluation uses standard Indian Railways 15-minute terminating arrival threshold."

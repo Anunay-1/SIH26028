@@ -97,6 +97,10 @@ class DynamicETAPredictor:
             "speed_kmh": "Section Speed Capability",
             "day_of_week": "Day-of-Week Congestion",
             "hour_of_day": "Time-of-Day Traffic",
+            "delay_momentum": "Recent Delay Acceleration",
+            "timetable_slack_density": "Timetable Recovery Buffer",
+            "station_centrality": "Junction Track Density",
+            "section_pace_gap": "Section Speed Capability Gap",
         }
 
         for i in range(len(features_df)):
@@ -124,6 +128,15 @@ class DynamicETAPredictor:
                 if feat_name == "current_delay" and feat_val > 0:
                     category = "momentum"
                     desc = f"Carrying forward {int(feat_val)} min upstream delay ({sign_str} min impact)"
+                elif feat_name == "delay_momentum" and abs(feat_val) >= 0.3:
+                    category = "acceleration"
+                    desc = f"Recent delay trend ({'+' if feat_val > 0 else ''}{feat_val:.1f} min/stop) ({sign_str} min impact)"
+                elif feat_name == "timetable_slack_density" and val < 0:
+                    category = "recovery"
+                    desc = f"Timetable padding absorbs delay ({sign_str} min impact)"
+                elif feat_name == "station_centrality" and feat_val >= 50:
+                    category = "junction"
+                    desc = f"Approaching high-traffic junction ({sign_str} min impact)"
                 elif feat_name == "is_fog_season" and feat_val == 1:
                     category = "weather"
                     desc = f"Winter fog risk in northern corridor ({sign_str} min impact)"

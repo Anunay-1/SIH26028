@@ -5,20 +5,20 @@
   "test_samples_count": 21535,
   "data_provenance": "Evaluated on held-out chronological test set (no within-journey persistence leakage). Simulation anchored to Indian Railways published FY 2022-23 operational statistics.",
   "ml_metrics": {
-    "mae_minutes": 4.47,
-    "rmse_minutes": 7.55,
-    "coverage_p10_p90_pct": 77.2,
-    "pinball_loss_p10": 0.63,
-    "pinball_loss_p50": 2.24,
-    "pinball_loss_p90": 1.68
+    "mae_minutes": 5.55,
+    "rmse_minutes": 9.05,
+    "coverage_p10_p90_pct": 78.0,
+    "pinball_loss_p10": 1.0,
+    "pinball_loss_p50": 2.77,
+    "pinball_loss_p90": 2.06
   },
   "baseline_metrics": {
     "name": "DelayPropagationBaseline (rho=0.90)",
-    "mae_minutes": 5.27,
-    "rmse_minutes": 8.83
+    "mae_minutes": 9.15,
+    "rmse_minutes": 13.96
   },
   "lift": {
-    "mae_reduction_pct": 15.2,
-    "description": "LightGBM reduces MAE by 15.2% over operational delay-propagation baseline on held-out dates."
+    "mae_reduction_pct": 39.4,
+    "description": "LightGBM reduces MAE by 39.4% over operational delay-propagation baseline on held-out dates."
   }
 }

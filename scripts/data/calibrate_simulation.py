@@ -11,10 +11,14 @@ Published Benchmark Targets (Ministry of Railways FY 2022-23 / Rajya Sabha repli
 """
 
 import json
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 import pandas as pd
 import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from app.config import PROCESSED_DATA_DIR
 from app.providers.replay import ReplayProvider
