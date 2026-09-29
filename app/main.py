@@ -42,7 +42,7 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-@app.get("/", summary="Dashboard UI")
+@app.api_route("/", methods=["GET", "HEAD"], summary="Dashboard UI")
 def root():
     index_file = STATIC_DIR / "index.html"
     if index_file.exists():

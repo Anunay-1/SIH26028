@@ -11,7 +11,7 @@ from app.storage.redis_store import store
 router = APIRouter(tags=["Health"])
 
 
-@router.get("/health", summary="Health Check")
+@router.api_route("/health", methods=["GET", "HEAD"], summary="Health Check")
 def health_check():
     return {
         "status": "healthy",
