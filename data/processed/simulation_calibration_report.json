@@ -23,12 +23,12 @@
     },
     "Passenger": {
       "samples_evaluated": 75,
-      "simulated_punctuality_pct": 41.3,
+      "simulated_punctuality_pct": 68.0,
       "ir_target_pct": 68.0,
-      "gap_points": -26.7,
-      "mean_final_delay_minutes": 22.0,
-      "median_final_delay_minutes": 18.7,
-      "p90_final_delay_minutes": 39.9
+      "gap_points": 0.0,
+      "mean_final_delay_minutes": 15.4,
+      "median_final_delay_minutes": 10.2,
+      "p90_final_delay_minutes": 23.4
     }
   },
   "notes": "Evaluation uses standard Indian Railways 15-minute terminating arrival threshold."

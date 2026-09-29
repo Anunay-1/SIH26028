@@ -49,11 +49,11 @@ PRIORITY_MULTIPLIERS = {
     "Hyd": 1.0,
     "Del": 1.0,
     "Klkt": 1.0,
-    "Passenger": 1.25,
-    "Pass": 1.25,
-    "MEMU": 1.25,
-    "DEMU": 1.25,
-    "Toy": 1.25,
+    "Passenger": 0.88,
+    "Pass": 0.88,
+    "MEMU": 0.88,
+    "DEMU": 0.88,
+    "Toy": 0.88,
 }
 DEFAULT_PRIORITY_MULTIPLIER = 1.0
 

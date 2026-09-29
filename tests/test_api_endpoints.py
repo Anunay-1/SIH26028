@@ -82,3 +82,21 @@ def test_analytics_endpoints():
     assert res_cal.status_code == 200
     cal_data = res_cal.json()
     assert "classes" in cal_data
+
+
+def test_frontend_static_serving():
+    # Root endpoint should serve index.html with HTML content
+    res_root = client.get("/")
+    assert res_root.status_code == 200
+    assert "text/html" in res_root.headers.get("content-type", "")
+    assert "RAIL-ETA" in res_root.text
+
+    # Static CSS should be accessible
+    res_css = client.get("/static/styles.css")
+    assert res_css.status_code == 200
+    assert "text/css" in res_css.headers.get("content-type", "")
+
+    # Static JavaScript should be accessible
+    res_js = client.get("/static/app.js")
+    assert res_js.status_code == 200
+    assert len(res_js.text) > 1000

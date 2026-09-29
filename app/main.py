@@ -32,8 +32,21 @@ app.include_router(predictions_router, prefix=API_V1_PREFIX)
 app.include_router(analytics_router, prefix=API_V1_PREFIX)
 
 
-@app.get("/", summary="Root index redirect")
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+# Mount Static Files (Frontend assets: styles.css, app.js)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/", summary="Dashboard UI")
 def root():
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
     return {
         "message": "Dynamic ETA Forecasting API is active.",
         "docs": "/docs",
