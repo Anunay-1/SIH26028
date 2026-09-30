@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic ETA Forecasting System — SIH 26028</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- Top Operational Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <span class="brand-badge">SIH 26028</span>
+      <div>
+        <div class="brand-title">RAIL-ETA // DYNAMIC COACHING FORECASTING SYSTEM</div>
+        <div class="brand-subtitle">Multi-Quantile LightGBM with TreeSHAP Explanations &amp; Point-in-Time Telemetry</div>
+      </div>
+    </div>
+    <div class="header-status-group">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        <span>TELEMETRY ACTIVE</span>
+      </div>
+      <span class="model-tag">MODEL: v1.2-LightGBM-Quantile</span>
+      <button class="btn-header" id="btn-open-accuracy">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+        Model Accuracy
+      </button>
+      <a href="/docs" target="_blank" class="btn-header" style="text-decoration:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        API Docs
+      </a>
+    </div>
+  </header>
+
+  <!-- Search & Route Control Strip -->
+  <div class="control-strip">
+    <div class="search-container">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="train-search-input" class="search-input" placeholder="Search Train No. or Name (e.g. 16558, 22161)..." autocomplete="off">
+      <div id="search-dropdown" class="search-dropdown"></div>
+    </div>
+
+    <div class="presets-container">
+      <span class="preset-label">Quick Presets:</span>
+      <button class="preset-chip active" data-train="16558">16558 (SBC → MYS)</button>
+      <button class="preset-chip" data-train="22161">22161 (BPL → DMO)</button>
+      <button class="preset-chip" data-train="11047">11047 (MRJ → UBL)</button>
+      <button class="preset-chip" data-train="41125">41125 (MSB → VLCY)</button>
+    </div>
+
+    <div class="date-selector-group">
+      <span class="preset-label">Journey Date:</span>
+      <input type="date" id="journey-date-input" class="date-input" value="2026-10-15">
+    </div>
+  </div>
+
+  <!-- Time-Travel Telemetry Replay Scrubber -->
+  <div class="scrubber-bar">
+    <div class="scrubber-meta">
+      <span class="scrubber-title">Time Travel:</span>
+      <span id="scrubber-display-time" class="scrubber-time">Loading...</span>
+    </div>
+
+    <div class="scrubber-controls">
+      <button class="btn-scrub" id="btn-scrub-prev" title="Step Previous Station">⏮ Prev</button>
+      <button class="btn-scrub" id="btn-scrub-play" title="Play / Pause Replay">▶ Play</button>
+      <button class="btn-scrub" id="btn-scrub-next" title="Step Next Station">⏭ Next</button>
+      <button class="btn-scrub" id="btn-scrub-live" title="Jump to Final Destination">Terminus ⏭</button>
+    </div>
+
+    <div class="slider-wrapper">
+      <input type="range" id="scrubber-slider" class="slider-range" min="0" max="100" value="0">
+      <span id="slider-stop-count" class="slider-status-flag">0 / 0 Stations Passed</span>
+    </div>
+  </div>
+
+  <!-- Primary Dashboard Grid -->
+  <main class="dashboard-grid">
+
+    <!-- Left Column: Route Progression Table -->
+    <section class="dash-card">
+      <div class="card-header">
+        <span class="card-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Active Route Telemetry &amp; Schedule
+        </span>
+        <span id="header-last-updated" style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">Syncing...</span>
+      </div>
+
+      <div class="card-body">
+        <!-- Train Hero Summary -->
+        <div class="train-hero">
+          <div>
+            <div class="train-title-row">
+              <span id="hero-train-num" class="train-num">-----</span>
+              <span id="hero-train-name" class="train-name-lg">Select a train to forecast</span>
+              <span id="hero-train-class" class="train-class-tag">EXP</span>
+            </div>
+            <div id="hero-corridor" class="train-corridor">
+              <span>Source → Destination</span>
+            </div>
+            <div class="progress-rail">
+              <div id="hero-progress-fill" class="progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="hero-stats">
+            <div class="hero-stat-item">
+              <div id="hero-current-delay" class="val" style="color:var(--signal-green);">0.0m</div>
+              <div class="lbl">Current Delay</div>
+            </div>
+            <div class="hero-stat-item">
+              <div id="hero-progress-pct" class="val">0.0%</div>
+              <div class="lbl">Progress</div>
+            </div>
+            <div class="hero-stat-item">
+              <div id="hero-status-tag" class="val" style="font-size:13px; color:var(--signal-amber);">SCHEDULED</div>
+              <div class="lbl">Status</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Route Stations Table -->
+        <div class="route-table-wrapper">
+          <table class="route-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">Seq</th>
+                <th style="width: 70px;">Code</th>
+                <th>Station Name</th>
+                <th style="width: 80px;">Sched Arr</th>
+                <th style="width: 90px;">Forecast Arr</th>
+                <th style="width: 85px;">Delay</th>
+                <th style="width: 85px;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="route-table-body">
+              <tr>
+                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                  Loading journey schedule...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Quantiles & SHAP Explainability -->
+    <aside style="display: flex; flex-direction: column; gap: 20px;">
+
+      <!-- Selected Station Quantile ETA Card -->
+      <section class="dash-card">
+        <div class="card-header">
+          <span class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Quantile ETA Forecast
+          </span>
+          <span id="target-stn-badge" class="badge-status badge-upcoming">TARGET STATION</span>
+        </div>
+
+        <div class="card-body">
+          <div style="margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <h3 id="target-stn-name" style="font-size: 16px; font-weight: 700; color: var(--text-primary);">--</h3>
+              <span id="target-stn-dist" style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">0.0 km ahead</span>
+            </div>
+            <div id="target-sched-time" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+              Scheduled Arrival: --:--
+            </div>
+          </div>
+
+          <!-- P10 / P50 / P90 Grid -->
+          <div class="quantiles-grid">
+            <div class="q-box p10">
+              <div class="q-label">P10 (Optimistic)</div>
+              <div id="q-p10-delay" class="q-delay">0.0m</div>
+              <div id="q-p10-time" class="q-time">--:--</div>
+            </div>
+            <div class="q-box p50">
+              <div class="q-label">P50 (Expected)</div>
+              <div id="q-p50-delay" class="q-delay">0.0m</div>
+              <div id="q-p50-time" class="q-time">--:--</div>
+            </div>
+            <div class="q-box p90">
+              <div class="q-label">P90 (Conservative)</div>
+              <div id="q-p90-delay" class="q-delay">0.0m</div>
+              <div id="q-p90-time" class="q-time">--:--</div>
+            </div>
+          </div>
+
+          <!-- Uncertainty Spread Gauge -->
+          <div class="uncertainty-card">
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">80% Confidence Interval Spread</div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Difference between P90 buffer and P10 best-case</div>
+            </div>
+            <div id="uncertainty-spread-val" class="uncertainty-val">0.0 min</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TreeSHAP Explainability Card -->
+      <section class="dash-card" style="flex: 1;">
+        <div class="card-header">
+          <span class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            TreeSHAP Causal Factor Attribution
+          </span>
+          <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);">Additive Minutes</span>
+        </div>
+
+        <div class="card-body">
+          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+            Primary operational reasons driving the predicted delay for this station:
+          </p>
+
+          <div id="shap-list" class="shap-list">
+            <div style="color: var(--text-muted); font-size: 12px; padding: 20px; text-align: center;">
+              Select an upcoming station to inspect its causal delay drivers.
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+  </main>
+
+  <!-- Modal: Model Evaluation & Calibration Audit -->
+  <div id="accuracy-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Official Model Evaluation &amp; Realism Audit</div>
+        <button class="modal-close" id="btn-close-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="metric-grid-2x2">
+          <div class="m-tile">
+            <div class="lbl">LightGBM Test MAE</div>
+            <div id="m-mae" class="num">5.55 min</div>
+            <div class="sub">Evaluated on held-out dates</div>
+          </div>
+          <div class="m-tile">
+            <div class="lbl">Lift Over Operational Baseline</div>
+            <div id="m-lift" class="num">+39.4%</div>
+            <div class="sub">Error reduction vs baseline</div>
+          </div>
+          <div class="m-tile">
+            <div class="lbl">P10–P90 Coverage</div>
+            <div id="m-coverage" class="num">78.0%</div>
+            <div class="sub">Target: 80% interval width</div>
+          </div>
+          <div class="m-tile">
+            <div class="lbl">Passenger Punctuality Gap</div>
+            <div id="m-cal-gap" class="num">0.0%</div>
+            <div class="sub">Exact 68.0% match to IR target</div>
+          </div>
+        </div>
+
+        <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+          Ministry of Railways Punctuality Audit (FY 2022-23 Baseline)
+        </div>
+        <div class="route-table-wrapper" style="margin-bottom: 16px;">
+          <table class="route-table" style="font-size: 12px;">
+            <thead>
+              <tr>
+                <th>Train Class</th>
+                <th>IR Target</th>
+                <th>Our Model</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Premium (Rajdhani/Vande Bharat)</td>
+                <td>90.0%</td>
+                <td>100.0%</td>
+                <td style="color:var(--signal-green); font-weight:600;">Calibrated (+10.0%)</td>
+              </tr>
+              <tr>
+                <td>Mail / Express</td>
+                <td>84.1%</td>
+                <td>72.2%</td>
+                <td style="color:var(--signal-amber); font-weight:600;">Conservative (-11.9%)</td>
+              </tr>
+              <tr>
+                <td>Passenger / Ordinary</td>
+                <td>68.0%</td>
+                <td>68.0%</td>
+                <td style="color:var(--signal-green); font-weight:600;">Optimal (0.0% Gap)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+          <strong>Data Provenance:</strong> Evaluated on strict chronological split (64,605 train / 21,535 test samples) with no persistence leakage. Anchor statistics verified against official Ministry of Railways answers in Parliament (Rajya Sabha PQ 262/784 &amp; PQ 263/908).
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

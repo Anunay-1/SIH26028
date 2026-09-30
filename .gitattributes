@@ -1,0 +1,2 @@
+# Enforce Unix line endings for LightGBM model text dumps (LightGBM tree_sizes byte offsets require LF)
+models/*.txt text eol=lf

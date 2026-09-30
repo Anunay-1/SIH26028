@@ -36,7 +36,14 @@ from app.simulation import delay_model as dm  # noqa: E402
 def _parse_time_str(t, base_date: date, day_offset: int = 0) -> Optional[datetime]:
     if pd.isna(t) or t in (None, "", "None"):
         return None
-    h, m, s = [int(x) for x in str(t).split(":")]
+    parts = [int(x) for x in str(t).strip().split(":")]
+    if len(parts) == 2:
+        h, m = parts
+        s = 0
+    elif len(parts) == 3:
+        h, m, s = parts
+    else:
+        return None
     return datetime.combine(base_date, datetime.min.time()) + timedelta(
         days=day_offset, hours=h, minutes=m, seconds=s
     )
@@ -88,6 +95,7 @@ def simulate_journey(route_id: str, train_number: str, train_type: str,
     cumulative_delay = dm.origin_delay(train_type, rng, previous_service_delay)
     day_counter = 0
     prev_sched_time = None
+    prev_actual_dt = None
     prev_distance = None
 
     for i, row in stops.iterrows():
@@ -99,14 +107,13 @@ def simulate_journey(route_id: str, train_number: str, train_type: str,
         if prev_sched_time is not None and sched_dt < prev_sched_time:
             day_counter += 1
             sched_dt = _parse_time_str(sched_time_raw, journey_date, day_counter)
-        prev_sched_time = sched_dt
 
         zone = zone_by_code.get(row["station_code"], "")
         ctx = cal.get_operating_context(zone, sched_dt)
 
         if i == 0:
             # origin delay already set before the loop; no section to traverse yet
-            pass
+            actual_dt = sched_dt + timedelta(minutes=cumulative_delay)
         else:
             distance = row.get("distance_from_origin_km")
             section_km = None
@@ -121,14 +128,28 @@ def simulate_journey(route_id: str, train_number: str, train_type: str,
             geo_min = _estimate_geographic_minimum(section_km, train_type)
             sched_minutes = None
             if prev_sched_time is not None:
-                sched_minutes = (sched_dt - prev_sched_time).total_seconds() / 60.0
+                sched_minutes = max(0.0, (sched_dt - prev_sched_time).total_seconds() / 60.0)
             recovery = dm.recovery_margin(sched_minutes, geo_min, cumulative_delay, rng)
 
             component_total = running_noise + congestion + weather + disruption - recovery
             cumulative_delay = dm.apply_autocorrelation(cumulative_delay, component_total)
 
+            candidate_actual_dt = sched_dt + timedelta(minutes=cumulative_delay)
+
+            # Monotonic physical causality clamp:
+            # Train must arrive at next station strictly after arriving/departing previous station.
+            min_transit_minutes = max(0.5, (geo_min * 0.7) if geo_min else 0.5)
+            earliest_arrival = prev_actual_dt + timedelta(minutes=min_transit_minutes) if prev_actual_dt else candidate_actual_dt
+            if candidate_actual_dt < earliest_arrival:
+                actual_dt = earliest_arrival
+                cumulative_delay = max(0.0, (actual_dt - sched_dt).total_seconds() / 60.0)
+            else:
+                actual_dt = candidate_actual_dt
+
+        prev_sched_time = sched_dt
+        prev_actual_dt = actual_dt
         prev_distance = row.get("distance_from_origin_km")
-        actual_dt = sched_dt + timedelta(minutes=cumulative_delay)
+
         next_station = stops.iloc[i + 1]["station_code"] if i + 1 < len(stops) else None
 
         events.append(
